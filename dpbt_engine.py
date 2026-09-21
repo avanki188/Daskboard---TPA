@@ -17,7 +17,7 @@ def process_single_file(file_obj, source_tpa, sheet_name=0):
     df = pd.read_excel(file_obj, sheet_name=sheet_name)
     df['Nguồn TPA'] = source_tpa
     
-    # Extract & map Unit ID
+    # Extract & map Unit ID từ 'Số đơn BH'
     room_codes = df['Số đơn BH'].apply(extract_room_code) if 'Số đơn BH' in df.columns else None
     mapped_units = room_codes.map(ROOM_TO_UNIT) if room_codes is not None else None
     
@@ -26,11 +26,18 @@ def process_single_file(file_obj, source_tpa, sheet_name=0):
     else:
         df['Đơn vị'] = df['Đơn vị'].fillna(mapped_units)
         
-    # Rule 2: Normalization (Bỏ tiền tố '1' nếu mã 11 ký tự)
-    df['Đơn vị'] = df['Đơn vị'].astype(str).str.replace(r'\.0$', '', regex=True)
-    df['Phòng ban'] = df['Đơn vị'].apply(
-        lambda x: x[1:] if len(x) == 11 and x.startswith('1') else x
-    )
+    # Rule 2: Normalization (Bỏ số '1' đầu tiên nếu mã có độ dài 11 ký tự)
+    # FIX LỖI float: Chuyển dữ liệu sang chuỗi an toàn trước khi kiểm tra độ dài len()
+    def format_phong_ban(val):
+        if pd.isna(val):
+            return ""
+        val_str = str(val).split('.')[0].strip() # Loại bỏ phần thập phân .0 nếu có
+        if len(val_str) == 11 and val_str.startswith('1'):
+            return val_str[1:]
+        return val_str
+
+    df['Đơn vị'] = df['Đơn vị'].apply(lambda x: "" if pd.isna(x) else str(x).split('.')[0].strip())
+    df['Phòng ban'] = df['Đơn vị'].apply(format_phong_ban)
     
     # Rule 2: Bank beneficiary details
     bank_info = TPA_BANK_INFO.get(source_tpa, {})
